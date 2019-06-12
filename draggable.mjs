@@ -1,4 +1,9 @@
+// CONSTANTS BLOCK
 export const dragSymbol = Symbol("draggable");
+
+const EventConstructor = 'DragEvent' in window ? window.DragEvent : window.MouseEvent;
+
+// END CONSTANTS BLOCK
 
 /// SETTABLES BLOCK
 // These variables and functions set up two
@@ -278,7 +283,7 @@ export function DraggableVM(opts) {
       activeDraggable = null;
       isDragging(false);
     }, (event) => {
-      const endEvent = new DragEvent("draggable-dragend", assignMouseEventProperties({
+      const endEvent = new EventConstructor("draggable-dragend", assignMouseEventProperties({
         relatedTarget: this.element
       }, event));
       Object.assign(endEvent, {
@@ -295,7 +300,7 @@ export function DraggableVM(opts) {
       }
       preHook && preHook(event);
       const target = event.target;
-      const dragEvent = new DragEvent("draggable-" + eventName, assignMouseEventProperties({
+      const dragEvent = new EventConstructor("draggable-" + eventName, assignMouseEventProperties({
         relatedTarget: this.element
       }, event));
       Object.assign(dragEvent, {
@@ -403,7 +408,7 @@ export default function Draggable(el, data = {}) {
       "z-index": 10000,
     });
     dragFloater(div);
-    var event = new DragEvent("draggable-dragstart", assignMouseEventProperties({
+    var event = new EventConstructor("draggable-dragstart", assignMouseEventProperties({
       relatedTarget: el,
     }, ev));
     Object.assign(event, {
