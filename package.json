@@ -1,0 +1,16 @@
+{
+  "name": "advanced-draggable",
+  "version": "1.0.0",
+  "description": "A reimplementation of the HTML5 drag events that allows for better data handling with fewer stipulations.",
+  "main": "draggable.mjs",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Bradley Momberger <brad@bitovi.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "fabric": "^3.1.0",
+    "steal": "^2.2.1",
+    "steal-tools": "^2.2.2"
+  }
+}

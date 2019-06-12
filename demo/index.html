@@ -1,0 +1,133 @@
+<html>
+<head>
+	<style>
+		.sidebar-panel {
+			position: relative;
+			left: 0;
+			top: 0;
+			float: left;			
+		}
+		.sidebar {
+			border: 1px solid black;
+			height: 600px;
+			display: flex;
+			flex-flow: column nowrap;
+			justify-content: center;
+		}
+
+		.sidebar div > * {
+			margin: 0 auto;
+		}
+
+		.drag-target {
+			height: 100px;
+			width: 100px;
+		}
+		.red {
+			width: 80px;
+			height: 50px;
+			background-color: red;
+		}
+		.green {
+			width: 60px;
+			height: 60px;
+			background-color: green;
+		}
+		.blue {
+			width: 50px;
+			height: 70px;
+			background-color: blue;
+			overflow: hidden;
+		}
+		.canvas-panel {
+			margin-left: 110px;
+		}
+		.canvas-container {
+			border: 1px dotted black;
+		}
+	</style>
+</head>
+<body>
+
+	<div class="sidebar-panel">
+		Shape Inventory
+		<div class="sidebar">
+			<div data-draggable='{"width": 80, "height": 50, "fill": "red"}' class="drag-target">
+				<div class="red">&nbsp;</div>
+			</div>
+			<div data-draggable='{"width": 60, "height": 60, "fill": "green"}' class="drag-target">
+				<div class="green">&nbsp;</div>
+			</div>
+			<div data-draggable='{"width": 50, "height": 70, "fill": "blue"}' class="drag-target">
+				<div class="blue"><img src="./blue.png"></div>
+			</div>
+		</div>
+	</div>
+
+	<div class="canvas-panel">
+		Drag items to here<br>
+		<canvas id="demo-canvas" width="600" height="600"></canvas>
+	<div>
+	<script>
+		steal = {
+			"forceES5": false // defaults to true
+		}
+	</script>
+	<script src="../node_modules/steal/steal.js" main="@empty">
+  import fabric from "fabric";
+	import Draggable from "../draggable.mjs";
+
+  const f = window.f = new fabric.Canvas("demo-canvas");
+  const container = document.querySelector(".canvas-container");  //this is created by Fabric.
+  let canvasFloater, dragFloater;
+  container.addEventListener("draggable-dragenter", function(ev) {
+		canvasFloater = new fabric.Rect(Object.assign({
+      top: ev.offsetY,
+      left: ev.offsetX
+    }, ev.data));
+    f.add(canvasFloater);
+
+    // make the new object the selected one
+		f.discardActiveObject();
+		var sel = new fabric.ActiveSelection([canvasFloater], {
+			canvas: f,
+		});
+		f.setActiveObject(sel);
+		f._setupCurrentTransform(ev, sel, true);
+    // hide the pseudo-native drag floater and make in canvas.
+    dragFloater = ev.draggable.dragFloater;
+    ev.draggable.dragFloater = null;
+  }, false);
+
+	container.addEventListener("draggable-dragover", function(ev) {
+		if(canvasFloater) {
+			f._translateObject(ev.offsetX, ev.offsetY);
+			f.requestRenderAll();
+		}
+  });
+
+	container.addEventListener("draggable-drop", function() {
+		if(canvasFloater) {
+			f._currentTransform = null; // prevent the handles from continuing to listen to mouse movement
+			f.requestRenderAll();
+			canvasFloater = null;
+		}
+  });
+
+  container.addEventListener("draggable-dragleave", function(ev) {
+		if(canvasFloater) {
+			f.discardActiveObject();
+			f.remove(canvasFloater);
+			f.requestRenderAll();
+			ev.draggable.dragFloater = dragFloater;
+			canvasFloater = null;
+		}
+  }, false);
+
+  document.querySelectorAll("[data-draggable]").forEach(d => {
+		new Draggable(d, JSON.parse(d.getAttribute("data-draggable")));
+  });
+
+	</script>
+</body>
+</html>
