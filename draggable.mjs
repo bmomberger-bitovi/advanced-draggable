@@ -10,7 +10,7 @@ const EventConstructor = 'DragEvent' in window ? window.DragEvent : window.Mouse
 // settable items with side effects when they are set.
 
 // isDragging is true when a drag is happening, false otherwise
-let _isDragging = false
+let _isDragging = false;
 const isDragging = function(setVal) {
   if(arguments.length > 0) {
     if (!setVal) {
@@ -54,6 +54,23 @@ function assignMouseEventProperties(toEvent, fromEvent) {
   return toEvent;
 }
 
+function left(node) {
+  let offset = 0;
+  while(node) {
+    offset += node.offsetLeft || 0;
+    node = node.parentNode;
+  }
+  return offset;
+}
+function top(node) {
+  let offset = 0;
+  while(node) {
+    offset += node.offsetTop || 0;
+    node = node.parentNode;
+  }
+  return offset;
+}
+
 
 // GLOBAL LISTENERS BLOCK
 // these listeners need to always be listening on the document, and in capture
@@ -74,6 +91,7 @@ document.addEventListener(
   },
   true
 );
+
 /**
  * This handler is for the case when the user releases the mouse button outside
  * the document, then re-enters with the button up.
@@ -81,7 +99,7 @@ document.addEventListener(
 document.addEventListener(
   "mouseenter",
   function cancelDragReenteringDocumentWithMouseUp(ev) {
-    if (!ev.buttons) {
+    if (!ev.buttons && ev.target === ev.currentTarget) {
       if (activeDraggable) {
         activeDraggable.cleanupDocumentEvents();
         activeDraggable.isMouseDown = false;
@@ -125,7 +143,7 @@ function setterProperty(settable) {
     get() {
       return settable();
     }
-  }
+  };
 }
 // END PROPERTY UTILS
 
@@ -284,7 +302,8 @@ export function DraggableVM(opts) {
       isDragging(false);
     }, (event) => {
       const endEvent = new EventConstructor("draggable-dragend", assignMouseEventProperties({
-        relatedTarget: this.element
+        relatedTarget: this.element,
+        bubbles: true
       }, event));
       Object.assign(endEvent, {
         data: this.data,
@@ -301,7 +320,8 @@ export function DraggableVM(opts) {
       preHook && preHook(event);
       const target = event.target;
       const dragEvent = new EventConstructor("draggable-" + eventName, assignMouseEventProperties({
-        relatedTarget: this.element
+        relatedTarget: this.element,
+        bubbles: name === "Move" || name === "Up"  // bubble for move and drop
       }, event));
       Object.assign(dragEvent, {
         data: this.data,
@@ -312,6 +332,63 @@ export function DraggableVM(opts) {
     };
   });
 
+  this.documentTouchMove = ev => {
+    ev.preventDefault();
+    var newTarget = document.elementFromPoint(ev.targetTouches[0].clientX, ev.targetTouches[0].clientY);
+    if(newTarget === null) {
+      // stop dragging if the touch event leaves the document
+      document.dispatchEvent(new MouseEvent("mouseleave", ev.changedTouches[0]));
+      isDragging(false);
+      this.lastTarget = document;
+    } else {
+      if(this.lastTarget !== newTarget) {
+        // generate synthetic leave and enter events.
+        const range = document.createRange();
+
+        range.setStart(this.lastTarget, 0);
+        range.setEnd(newTarget, 0);
+        const rangeAncestor = range.commonAncestorContainer;
+        const nodeChainLeave = [];
+        const nodeChainEnter = [];
+        let currentNode = this.lastTarget;
+        while (currentNode && currentNode !== rangeAncestor) {
+          nodeChainLeave.push(currentNode);
+          currentNode = currentNode.parentNode;
+        }
+        currentNode = newTarget;
+        while (currentNode && currentNode !== rangeAncestor) {
+          nodeChainEnter.push(currentNode);
+          currentNode = currentNode.parentNode;
+        }
+        nodeChainEnter.reverse();
+        nodeChainLeave.forEach(node => {
+          node.dispatchEvent(new MouseEvent("mouseleave"), { bubbles: false, cancelBubble: true });
+        });
+        nodeChainEnter.forEach(node => {
+          node.dispatchEvent(new MouseEvent("mouseenter"), { bubbles: false, cancelBubble: true });
+        });
+      }
+      newTarget.dispatchEvent(new MouseEvent(
+        "mousemove", {
+          clientX: ev.changedTouches[0].clientX,
+          clientY: ev.changedTouches[0].clientY,
+          screenX: ev.changedTouches[0].screenX,
+          screenY: ev.changedTouches[0].screenY,
+          pageX: ev.changedTouches[0].pageX,
+          pageY: ev.changedTouches[0].pageY,
+          offsetX: ev.changedTouches[0].pageX - left(newTarget),
+          offsetY: ev.changedTouches[0].pageY - top(newTarget)
+        }
+      ));
+      this.lastTarget = newTarget;
+    }
+  };
+  this.documentTouchUp = ev => {
+    if(ev.touches.length === 0) {
+      ev.stopPropagation();
+      ev.target.dispatchEvent(new MouseEvent("mouseup", ev.changedTouches[0]));
+    }
+  };
 }
 
 DraggableVM.prototype.setupDocumentEvents = function() {
@@ -324,6 +401,11 @@ DraggableVM.prototype.setupDocumentEvents = function() {
   document.addEventListener("mouseup", this.documentMouseUp, true);
   document.addEventListener("mouseenter", this.documentMouseEnter, true);
   document.addEventListener("mouseleave", this.documentMouseLeave, true);
+  /**
+   * Also do the same for touch events;
+   */
+  document.addEventListener("touchmove", this.documentTouchMove, {passive: false, capture: true});
+  document.addEventListener("touchend", this.documentTouchUp, true);
 };
   /**
    * Once a drag is ended, remove these events from the document.
@@ -333,21 +415,25 @@ DraggableVM.prototype.cleanupDocumentEvents = function() {
   document.removeEventListener("mouseup", this.documentMouseUp, true);
   document.removeEventListener("mouseenter", this.documentMouseEnter, true);
   document.removeEventListener("mouseleave", this.documentMouseLeave, true);
+
+  document.removeEventListener("touchmove", this.documentTouchMove, {passive: false, capture: true});
+  document.removeEventListener("touchend", this.documentTouchUp, true);
 };
 
 
 export default function Draggable(el, data = {}) {
 
-  var viewModel = el[dragSymbol] = new DraggableVM({
+  const viewModel = el[dragSymbol] = new DraggableVM({
     data
   });
+
   /**
    * Mousedown starts the process of listening for a drag.
    * For a drag to start, the user must also move the pointer
    * 5px away from the location of this mousedown, so record
    * the initial x and y coords.
    */
-  el.addEventListener("mousedown", ev => {
+  const mousedownHandler = ev => {
     if (viewModel.enabled) {
       Object.assign(viewModel, {
         isMouseDown: true,
@@ -356,12 +442,20 @@ export default function Draggable(el, data = {}) {
       });
       activeDraggable = viewModel;
     }
+  };
+  el.addEventListener("mousedown", mousedownHandler, false);
+  el.addEventListener("touchstart", ev => {
+    if(ev.touches.length === 1) {    
+      ev.preventDefault();
+      viewModel.lastTarget = ev.target;
+      mousedownHandler(ev.targetTouches[0]);
+    }
   }, false);
   /**
    * moving the mouse on the element more than the 5px tolerance,
    * or leaving the element, causes the drag to start.
    */
-  el.addEventListener("mousemove", ev => {
+  const mousemoveHandler = ev => {
     const eventX = ev.clientX;
     const eventY = ev.clientY;
     const deltaEventX = Math.abs(eventX - viewModel.initialX);
@@ -374,6 +468,11 @@ export default function Draggable(el, data = {}) {
     ) {
       startDragging(ev);
     }
+  };
+  el.addEventListener("mousemove", mousemoveHandler, false);
+  el.addEventListener("touchmove", ev => {
+    ev.preventDefault();
+    mousemoveHandler(ev.targetTouches[0]);
   }, false);
   el.addEventListener("mouseleave", function(ev) {
     if (
@@ -409,7 +508,7 @@ export default function Draggable(el, data = {}) {
     });
     dragFloater(div);
     var event = new EventConstructor("draggable-dragstart", assignMouseEventProperties({
-      relatedTarget: el,
+      bubbles: true
     }, ev));
     Object.assign(event, {
       data: viewModel.data,
@@ -427,7 +526,7 @@ export default function Draggable(el, data = {}) {
         if(node.tagName === "IMG") {
           node.setAttribute("draggable", false);
         }
-      })
+      });
     });
   });
   imgObserver.observe(el, {
@@ -446,7 +545,7 @@ export default function Draggable(el, data = {}) {
           draggableObserver.disconnect();
           node[dragSymbol] = null;
         }
-      })
+      });
     });
   });
   draggableObserver.observe(el.parentNode, { childList: true }); 

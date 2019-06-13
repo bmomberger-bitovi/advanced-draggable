@@ -71,7 +71,7 @@
 	<script>
 		steal = {
 			"forceES5": false // defaults to true
-		}
+		};
 	</script>
 	<script src="../node_modules/steal/steal.js" main="@empty">
   import fabric from "fabric";
@@ -123,6 +123,13 @@
 			canvasFloater = null;
 		}
   }, false);
+
+	document.addEventListener("draggable-dragstart", function(ev) {
+  	document.querySelector(".lower-canvas").style.backgroundColor = "#dddddd";
+  }, false); 
+  document.addEventListener("draggable-dragend", function(ev) {
+  	document.querySelector(".lower-canvas").style.backgroundColor = null;
+  }, false); 
 
   document.querySelectorAll("[data-draggable]").forEach(d => {
 		new Draggable(d, JSON.parse(d.getAttribute("data-draggable")));
